@@ -1,6 +1,7 @@
 from torch import nn
-from transformers import Trainer
-
+import torch
+from transformers import Trainer, AutoTokenizer, AutoModelForSequenceClassification, TrainingArguments
+import pandas as pd
 
 class CustomTrainer(Trainer):
     def compute_loss(self, model, inputs, return_outputs=False):
@@ -46,14 +47,14 @@ ds_config = {
         "stage": 2,
         "offload_optimizer": {
             "device": "cpu",
-            "pin_memory": true
+            "pin_memory": True
         },
-        "allgather_partitions": true,
+        "allgather_partitions": True,
         "allgather_bucket_size": 2e8,
-        "overlap_comm": true,
-        "reduce_scatter": true,
+        "overlap_comm": True,
+        "reduce_scatter": True,
         "reduce_bucket_size": 2e8,
-        "contiguous_gradients": true
+        "contiguous_gradients": True
     },
 
     "gradient_accumulation_steps": "auto",
@@ -62,20 +63,20 @@ ds_config = {
     "train_micro_batch_size_per_gpu": "auto",
 }
 
+def config():
+    pass
 
-from transformers import AutoTokenizer
-
-tokenizer = AutoTokenizer.from_pretrained(model_checkpoint, use_fast=True)
+model_name = 'sentence-transformers/distiluse-base-multilingual-cased-v1'
+tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
 
 def preprocess_function(examples):
     return tokenizer(examples[sentence1_key], examples[sentence2_key], truncation=True)
-
+dataset = pd.read_json()
 encoded_dataset = dataset.map(preprocess_function, batched=True)
 
-from transformers import AutoModelForSequenceClassification, TrainingArguments, Trainer
-
+task = 'stsb'
 num_labels = 3 if task.startswith("mnli") else 1 if task=="stsb" else 2
-model = AutoModelForSequenceClassification.from_pretrained(model_checkpoint, num_labels=num_labels)
+model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
 
 metric_name = "pearson" if task == "stsb" else "matthews_correlation" if task == "cola" else "accuracy"
 model_name = model_checkpoint.split("/")[-1]
@@ -117,7 +118,7 @@ trainer.train()
 
 trainer.evaluate()
 
-trainer.push_to_hub()
+# trainer.push_to_hub()
 
 # ! pip install optuna
 # ! pip install ray[tune]
@@ -125,18 +126,18 @@ trainer.push_to_hub()
 def model_init():
     return AutoModelForSequenceClassification.from_pretrained(model_checkpoint, num_labels=num_labels)
 
-trainer = Trainer(
-    model_init=model_init,
-    args=args,
-    train_dataset=encoded_dataset["train"],
-    eval_dataset=encoded_dataset[validation_key],
-    tokenizer=tokenizer,
-    compute_metrics=compute_metrics
-)
-
-train_dataset = encoded_dataset["train"].shard(index=1, num_shards=10)
-best_run = trainer.hyperparameter_search(n_trials=10, direction="maximize")
-for n, v in best_run.hyperparameters.items():
-    setattr(trainer.args, n, v)
-
-trainer.train()
+# trainer = Trainer(
+#     model_init=model_init,
+#     args=args,
+#     train_dataset=encoded_dataset["train"],
+#     eval_dataset=encoded_dataset[validation_key],
+#     tokenizer=tokenizer,
+#     compute_metrics=compute_metrics
+# )
+#
+# train_dataset = encoded_dataset["train"].shard(index=1, num_shards=10)
+# best_run = trainer.hyperparameter_search(n_trials=10, direction="maximize")
+# for n, v in best_run.hyperparameters.items():
+#     setattr(trainer.args, n, v)
+#
+# trainer.train()
